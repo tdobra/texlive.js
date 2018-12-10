@@ -220,8 +220,6 @@
 /texmf-dist/bibtex/bst/base/.
 /texmf-dist/scripts/.
 /texmf-dist/scripts/context/.
-/texmf-dist/scripts/context/stubs/.
-/texmf-dist/scripts/context/stubs/mswin/.
 /texmf-dist/scripts/context/perl/.
 /texmf-dist/scripts/oberdiek/.
 /texmf-dist/scripts/simpdftex/.
@@ -339,7 +337,6 @@
 /texmf-var/tex/generic/config/language.dat
 /texmf-var/tex/generic/config/language.def
 /texmf-var/tex/generic/config/language.dat.lua
-/texmf-var/.DS_Store
 /texmf-var/web2c/luajittex/luajittex.fmt
 /texmf-var/web2c/luajittex/luajittex.log
 /texmf-var/web2c/pdftex/pdflatex.fmt
@@ -368,11 +365,8 @@
 /texmf-var/web2c/metafont/mf.base
 /texmf-var/web2c/metafont/mf.log
 /texmf-var/ls-R
-/texmf-var/fonts/.DS_Store
-/texmf-var/fonts/map/pdftex/.DS_Store
 /texmf-var/fonts/map/pdftex/updmap/pdftex_dl14.map
 /texmf-var/fonts/map/pdftex/updmap/pdftex_ndl14.map
-/texmf-var/fonts/map/.DS_Store
 /texmf-var/fonts/map/dvipdfmx/updmap/kanjix.map
 /texmf-var/fonts/map/dvips/updmap/ps2pk.map
 /texmf-var/fonts/map/dvips/updmap/download35.map
@@ -2366,7 +2360,8 @@
 /texmf-dist/bibtex/bst/base/siam.bst
 /texmf-dist/bibtex/bst/base/ieeetr.bst
 /texmf-dist/bibtex/bst/base/alpha.bst
-/texmf-dist/scripts/context/stubs/mswin/mptopdf.exe
+/texmf-dist/scripts/.DS_Store
+/texmf-dist/scripts/context/.DS_Store
 /texmf-dist/scripts/context/perl/mptopdf.pl
 /texmf-dist/scripts/oberdiek/magicnum.lua
 /texmf-dist/scripts/oberdiek/luacolor-pre065.lua
@@ -2857,9 +2852,7 @@
 /texmf-dist/fonts/pk/ljfour/public/cm/dpi600/cmr17.pk
 /texmf-dist/fonts/pk/ljfour/public/cm/dpi600/cmr8.pk
 /texmf-dist/fonts/pk/ljfour/public/cm/dpi600/cmr12.pk
-/texmf-dist/fonts/type1/.DS_Store
 /texmf-dist/fonts/type1/public/pdftex/dummy-space.pfb
-/texmf-dist/fonts/type1/public/.DS_Store
 /texmf-dist/fonts/type1/public/tex-gyre/qhvbi.pfb
 /texmf-dist/fonts/type1/public/tex-gyre/qhvb.pfb
 /texmf-dist/fonts/type1/public/tex-gyre/qhvbi.pfm
@@ -3162,7 +3155,6 @@
 /texmf-dist/fonts/type1/public/amsfonts/cyrillic/wncyss10.pfb
 /texmf-dist/fonts/type1/public/amsfonts/cyrillic/wncyb10.pfb
 /texmf-dist/fonts/type1/public/amsfonts/cyrillic/wncyb10.pfm
-/texmf-dist/fonts/.DS_Store
 /texmf-dist/fonts/source/public/knuth-lib/ztest.mf
 /texmf-dist/fonts/source/public/knuth-lib/rtest.mf
 /texmf-dist/fonts/source/public/knuth-lib/test.mf
@@ -3639,18 +3631,15 @@
 /texmf-dist/fonts/enc/dvips/base/7t.enc
 /texmf-dist/fonts/enc/dvips/base/texnansx.enc
 /texmf-dist/fonts/enc/dvips/base/texmital.enc
-/texmf-dist/fonts/map/pdftex/.DS_Store
 /texmf-dist/fonts/map/pdftex/updmap/pdftex_dl14.map
 /texmf-dist/fonts/map/pdftex/updmap/pdftex.map
 /texmf-dist/fonts/map/pdftex/updmap/pdftex_ndl14.map
-/texmf-dist/fonts/map/.DS_Store
 /texmf-dist/fonts/map/glyphlist/texglyphlist.txt
 /texmf-dist/fonts/map/glyphlist/glyphlist.txt
 /texmf-dist/fonts/map/glyphlist/pdfglyphlist.txt
 /texmf-dist/fonts/map/dvipdfmx/cid-x.map
 /texmf-dist/fonts/map/dvipdfmx/ckx.map
 /texmf-dist/fonts/map/dvipdfmx/updmap/kanjix.map
-/texmf-dist/fonts/map/dvips/.DS_Store
 /texmf-dist/fonts/map/dvips/tex-gyre/qhv-qx.map
 /texmf-dist/fonts/map/dvips/tex-gyre/qhv-l7x.map
 /texmf-dist/fonts/map/dvips/tex-gyre/qhv-t5.map
@@ -3696,7 +3685,6 @@
 /texmf-dist/texconfig/v/vt100
 /texmf-dist/texconfig/x/xterm
 /texmf-dist/dvips/gsftopk/render.ps
-/texmf-dist/dvips/.DS_Store
 /texmf-dist/dvips/config/config.deskjet
 /texmf-dist/dvips/config/config.toshiba
 /texmf-dist/dvips/config/cx.cfg

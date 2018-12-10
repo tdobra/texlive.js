@@ -1756,16 +1756,9 @@ texlive
 
 ./scripts/context:
 perl
-stubs
 
 ./scripts/context/perl:
 mptopdf.pl
-
-./scripts/context/stubs:
-mswin
-
-./scripts/context/stubs/mswin:
-mptopdf.exe
 
 ./scripts/lua-alt-getopt:
 alt_getopt.lua
