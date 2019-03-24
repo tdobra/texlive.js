@@ -2,4 +2,4 @@
 * text=auto
 
 # Force TeXLive list of files to use LF endings
-texlive.lst eol=lf
+*.lst eol=lf
