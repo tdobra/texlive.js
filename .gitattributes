@@ -1,2 +1,5 @@
-# Set the default behaviour to LF line endings on text files
-* text=auto eol=lf
+# Set the default behaviour to match local system
+* text=auto
+
+# Force TeXLive list of files to use LF endings
+texlive.lst eol=lf
