@@ -2,4 +2,4 @@
 * text=auto
 
 # Javascript web worker must have line endings of LF, regardless of operating system
-*worker.js text eol=lf
+*worker.js binary
