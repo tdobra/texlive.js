@@ -1,5 +1,2 @@
-# Set the default behavior, in case people don't have core.autocrlf set.
-* text=auto
-
-# Javascript web worker must have line endings of LF, regardless of operating system
-*worker.js binary
+# Set the default behaviour to LF line endings on text files
+* text=auto eol=lf
