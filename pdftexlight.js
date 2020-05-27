@@ -8,10 +8,12 @@ class TeXLive {
   constructor(obj) {
     //Private properties
     this.worker = undefined;
+    if (obj.texURL === undefined) { throw new Error("texURL undefined"); }
     this.texURL = obj.texURL;
     this.workerFolder = obj.workerFolder;
+    if (this.workerFolder === undefined) { this.workerFolder = ""; }
     this.onlog = obj.onlog;
-    this.packages = getPackages();
+    this.packages = this.getPackages();
     //Public functions
     this.createCmd("FS_createDataFile"); // parentPath, filename, data, canRead, canWrite
     this.createCmd("FS_readFile"); // filename
@@ -62,7 +64,7 @@ class TeXLive {
     const packageList = await TeXLive.getFile(this.workerFolder + "texlivelight.lst");
 
     //List of URLs. Remove last element as blank.
-    const urlList = texlivelst.split("\n").pop();
+    const urlList = packageList.split("\n").pop();
 
     //Read and sort the list
     const folders = [];
@@ -92,7 +94,7 @@ class TeXLive {
     if (!("command" in data)) { console.warn("Message from worker missing command: ", data); }
     switch (data.command) {
     case "ready":
-      this.workerReady.resolve();
+      this.workerReady();
       break;
     case "stdout":
     case "stderr":
@@ -100,8 +102,8 @@ class TeXLive {
       break;
     default:
       const msg_id = data.msg_id;
-      if (("msg_id" in data) && (msg_id in this.cmdPromises)) {
-        this.cmdPromises[msg_id].resolve(data.result);
+      if (("msg_id" in data) && (msg_id in this.cmdResolves)) {
+        this.cmdResolves[msg_id](data.result);
       } else {
         console.warn("Unknown worker message " + msg_id + "!");
       }
@@ -110,34 +112,41 @@ class TeXLive {
 
   async prestart() {
     //Initiate file downloads
-    const workerSrc = TeXLive.getFile(this.workerFolder + "pdftex.js");
+    const workerSrc = TeXLive.getFile(this.workerFolder + "pdftex-worker.js");
     const texSrc = TeXLive.getFile(this.texURL);
 
     //Start worker
-    const workerReady = new Promise();
-    this.cmdPromises = [];
+    const texliveInstance = this;
+    const workerProm = new Promise((resolve) => { this.workerReady = resolve; });
+    this.cmdResolves = [];
     this.worker = new Worker(await workerSrc);
-    this.worker.addEventListener("message", this.handleMsg, { passive: true });
-    await workerReady;
+    //Make sure event handler uses this to refer to TeXLive instance
+    this.worker.addEventListener("message", (ev) => { this.handleMsg(ev); }, { passive: true });
+    await workerProm;
 
     //Set memory
     const memSize = 80 * 1024 * 1024;
     const availableSize = await this.set_TOTAL_MEMORY(memSize);
-    if (res < memSize) { console.warn("Memory limited to " + res.toString() + "B"); }
+    if (availableSize < memSize) { console.warn("Memory limited to " + availableSize.toString() + "B"); }
 
     //Add folders then files to emscripten
     const packages = await this.packages;
     //Folders are created recursively
     await Promise.all(packages.folders.map(async (folder) => this.FS_createPath("/", folder, true, true)));
-    const packageLoads = packages.files.map(async (file) => this.FS_createDataFile(file.path, file.name, TeXLives.getFile(file.fullurl), true, false));
+    alert("CP1");
+    const packageLoads = packages.files.map(async (file) => this.FS_createDataFile(file.path, file.name, TeXLive.getFile(file.fullurl), true, false));
+    alert("CP2");
     packageLoads.push(this.FS_createDataFile("/", "input.tex", await texSrc, true, false));
+    alert("CP3");
     await Promise.all(packageLoads);
+    alert("CP4");
   }
 
   async sendCmd(cmd) {
-    const prom = new Promise();
-    const msg_id = this.cmdPromises.push(prom) - 1;
-    cmd.msg_id = msg_id;
+    const prom = new Promise((resolve) => {
+      const msg_id = this.cmdResolves.push(resolve) - 1;
+      cmd.msg_id = msg_id;
+    });
     await this.workerReady;
     this.worker.postMessage(JSON.stringify(cmd));
     return prom;
@@ -154,18 +163,16 @@ TeXLive.getFile = (() => {
     const pathInd = paths.indexOf(path);
     if (pathInd === -1) {
       //Not found: need to download
-      const fileFetch = fetch(path);
-      await fileFetch;
+      const fileFetch = await fetch(path);
       if (!fileFetch.ok) { throw new Error("Could not download file " + path + ": " + fileFetch.status); }
       let fileContent;
       if (path.endsWith(".js")) {
         //Web workers need a data URL
-        const fileBlob = fileFetch.blob();
-        await fileBlob;
-        fileContent = URL.createObjectURL(fileBlob);
+        fileContent = URL.createObjectURL(await fileFetch.blob());
+      } else if (path.endsWith(".lst")) {
+        fileContent = await fileFetch.text();
       } else {
-        fileContent = fileFetch.text();
-        await fileContent;
+        fileContent = await fileFetch.arrayBuffer();
       }
       contents.push(fileContent);
       paths.push(path);
