@@ -53,9 +53,9 @@ class TeXLive {
   //Private functions
   createCmd(cmd) {
     //args is an array
-    this[cmd] = (args) => this.sendCmd({
+    this[cmd] = (...args) => this.sendCmd({
       "command":  cmd,
-      "arguments": args,
+      "arguments": args
     });
   }
 
@@ -131,6 +131,7 @@ class TeXLive {
 
     //Add folders then files to emscripten
     const packages = await this.packages;
+
     //Folders are created recursively
     await Promise.all(packages.folders.map(async (folder) => this.FS_createPath("/", folder, true, true)));
     alert("CP1");
