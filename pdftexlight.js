@@ -8,12 +8,8 @@ class TeXLive {
   constructor(obj) {
     //Private properties
     this.worker = undefined;
-    if (obj.texURL === undefined) { throw new Error("texURL undefined"); }
-    this.texURL = obj.texURL;
-    this.workerFolder = obj.workerFolder;
-    if (this.workerFolder === undefined) { this.workerFolder = ""; }
     this.onlog = obj.onlog;
-    this.packages = this.getPackages();
+    addEventListener("unload", () => { this.terminate(); });
     //Public functions
     this.createCmd("FS_createDataFile"); // parentPath, filename, data, canRead, canWrite
     this.createCmd("FS_readFile"); // filename
@@ -24,23 +20,29 @@ class TeXLive {
     this.ready = this.prestart();  //Returns a promise
   }
 
-  async compile() {
-    await this.ready;
-    await this.sendCmd({
-      "command": "run",
-      "arguments": ["-interaction=nonstopmode", "-output-format", "pdf", "input.tex"]
-    });
-    const binary_pdf = this.FS_readFile("/input.pdf");
-    await binary_pdf;
+  async compile(src) {
+    try {
+      try {
+        await this.orError(this.ready);
+        await this.orError(this.FS_createDataFile("/", "input.tex", src, true, false));
+        await this.orError(this.sendCmd({
+          "command": "run",
+          "arguments": ["-interaction=nonstopmode", "-output-format", "pdf", "input.tex"]
+        }));
+        const binary_pdf = await this.orError(this.FS_readFile("input.pdf"));
+      } finally {
+        //Reset system
+        this.terminate();
+        //Ready is reset to new promise before compile promise resolves
+        this.ready = this.prestart();
+      }
+    } catch (err) { throw err; }
 
-    //Reset system
-    this.terminate();
-    //Ready is reset to new promise before compile promise resolves
-    this.ready = this.prestart();
-
-    //Return values
+    //Return data URL
     if (binary_pdf === false) { throw new Error("PDF failed to compile"); }
-    return "data:application/pdf;charset=binary;base64," + btoa(binary_pdf);
+    const outBlob = new Blob([outArray], { type: "application/pdf" });
+    return URL.createObjectURL(outBlob);
+    // return "data:application/pdf;charset=binary;base64," + btoa(binary_pdf);
   }
 
   terminate() {
@@ -57,36 +59,6 @@ class TeXLive {
       "command":  cmd,
       "arguments": args
     });
-  }
-
-  async getPackages() {
-    //Load TeXLive file list
-    const packageList = await TeXLive.getFile(this.workerFolder + "texlivelight.lst");
-
-    //List of URLs. Remove last element as blank.
-    const urlList = packageList.split("\n").pop();
-
-    //Read and sort the list
-    const folders = [];
-    const files = [];
-    for (const url of urlList) {
-      const lastSeparator = url.lastIndexOf("/");
-      //Path and name do not include the / separating them
-      if (url.endsWith(".")) {
-        folders.push(url.substring(0, lastSeparator - 1));
-      } else {
-        files.push({
-          fullurl: this.workerFolder + "texlive" + url,
-          path: url.substring(0, lastSeparator),
-          name: url.substring(lastSeparator + 1)
-        });
-      }
-    }
-
-    return {
-      folders: folders,
-      files: files,
-    };
   }
 
   handleMsg(ev) {
@@ -110,37 +82,50 @@ class TeXLive {
     }
   }
 
+  async orError(cmdPromise) {
+    //Use await this.orError(cmd) to also check for errors thrown by worker, which will cause this.workerError to reject
+    //Apply to awaits of FS_* and sendCmd
+    const promises = [cmdPromise];
+    if (this.workerError !== undefined) { promises.push(this.workerError); }
+    try {
+      return await Promise.race(promises);
+    } catch (err) {
+      if (typeof err === "string") {
+        throw new Error(err);
+      } else {
+        throw err;
+      }
+    }
+  }
+
   async prestart() {
     //Initiate file downloads
-    const workerSrc = TeXLive.getFile(this.workerFolder + "pdftex-worker.js");
-    const texSrc = TeXLive.getFile(this.texURL);
+    const workerSrc = TeXLive.getFile(TeXLive.workerFolder + "pdftex-worker.js");
+    const packagesProm = TeXLive.getPackages();
 
     //Start worker
-    const texliveInstance = this;
     const workerProm = new Promise((resolve) => { this.workerReady = resolve; });
+    this.workerError = new Promise((resolve, reject) => { this.workerOnError = reject; });
     this.cmdResolves = [];
     this.worker = new Worker(await workerSrc);
     //Make sure event handler uses this to refer to TeXLive instance
-    this.worker.addEventListener("message", (ev) => { this.handleMsg(ev); }, { passive: true });
-    await workerProm;
+    this.worker.addEventListener("message", (ev) => { this.handleMsg(ev); });
+    this.worker.addEventListener("error", (ev) => {
+      ev.preventDefault();
+      this.workerOnError("Worker: " + ev.message);
+    });
+    await this.orError(workerProm);
 
     //Set memory
     const memSize = 80 * 1024 * 1024;
-    const availableSize = await this.set_TOTAL_MEMORY(memSize);
+    const availableSize = await this.orError(this.set_TOTAL_MEMORY(memSize));
     if (availableSize < memSize) { console.warn("Memory limited to " + availableSize.toString() + "B"); }
 
     //Add folders then files to emscripten
-    const packages = await this.packages;
-
+    const packages = await packagesProm;
     //Folders are created recursively
-    await Promise.all(packages.folders.map(async (folder) => this.FS_createPath("/", folder, true, true)));
-    alert("CP1");
-    const packageLoads = packages.files.map(async (file) => this.FS_createDataFile(file.path, file.name, TeXLive.getFile(file.fullurl), true, false));
-    alert("CP2");
-    packageLoads.push(this.FS_createDataFile("/", "input.tex", await texSrc, true, false));
-    alert("CP3");
-    await Promise.all(packageLoads);
-    alert("CP4");
+    await this.orError(Promise.all(packages.folders.map((folder) => this.FS_createPath("/", folder, true, true))));
+    await this.orError(Promise.all(packages.files.map((file) => this.FS_createDataFile(file.path, file.name, TeXLive.getFile(file.fullurl), true, false))));
   }
 
   async sendCmd(cmd) {
@@ -148,13 +133,15 @@ class TeXLive {
       const msg_id = this.cmdResolves.push(resolve) - 1;
       cmd.msg_id = msg_id;
     });
-    await this.workerReady;
+    await this.orError(this.workerReady);
     this.worker.postMessage(JSON.stringify(cmd));
     return prom;
   };
 }
 
 //Static properties on class - to be only run once. Static properties in class are not yet fully supported.
+TeXLive.workerFolder = ""; //To be set relative to calling webpage
+
 TeXLive.getFile = (() => {
   //Download and store each required source file
   const paths = [];
@@ -184,6 +171,42 @@ TeXLive.getFile = (() => {
   };
 })();
 
+TeXLive.getPackages = (() => {
+  const folders = [];
+  const files = [];
+
+  return async () => {
+    if (files.length === 0) {
+      //Load TeXLive file list
+      const packageList = await TeXLive.getFile(TeXLive.workerFolder + "texlivelight.lst");
+
+      //List of URLs. Remove last element as blank.
+      const urlList = packageList.split("\n");
+      urlList.pop();
+
+      //Read and sort the list
+      for (const url of urlList) {
+        const lastSeparator = url.lastIndexOf("/");
+        const path = url.substring(0, lastSeparator);
+        //Path and name do not include the / separating them
+        if (url.endsWith(".")) {
+          folders.push(path);
+        } else {
+          files.push({
+            fullurl: TeXLive.workerFolder + "texlive/" + url,
+            path: path,
+            name: url.substring(lastSeparator + 1)
+          });
+        }
+      }
+    }
+
+    return {
+      folders: folders,
+      files: files
+    };
+  };
+})();
 
 
 // TeXLive.chunksize = (async () => {
