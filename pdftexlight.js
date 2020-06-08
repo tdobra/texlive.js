@@ -20,16 +20,38 @@ class TeXLive {
     this.ready = this.prestart();  //Returns a promise
   }
 
-  async compile(src) {
+  static arrayBufferToString(buffer) {
+    //Converts array buffer to binary string
+    //Trying to do this using function.apply causes stack overflow - use for loop instead
+    const byteArray = new Uint8Array(buffer);
+    let binaryString = "";
+    for (let byteId = 0; byteId < byteArray.length; byteId++) {
+      binaryString += String.fromCharCode(byteArray[byteId]);
+    }
+    return binaryString;
+  }
+
+  async compile(src, resourceStrings = [], resourceNames = []) {
+    //src is URL of TeX document to run
+    //resourceBuffers is an array of ArrayBuffers of additional input files with corresponding names in resourceNames
+    let binary_pdf;
     try {
       try {
         await this.orError(this.ready);
-        await this.orError(this.FS_createDataFile("/", "input.tex", src, true, false));
+        //Upload input files to Emscripten file system
+        await this.orError(Promise.all(
+          resourceStrings.map(
+            //TODO: Trying with write permissions
+            (rString, index) => this.FS_createDataFile("/", resourceNames[index], rString, true, false)
+          ).concat(
+            this.FS_createDataFile("/", "input.tex", await TeXLive.getFile(src), true, false)
+          )
+        ));
         await this.orError(this.sendCmd({
           "command": "run",
           "arguments": ["-interaction=nonstopmode", "-output-format", "pdf", "input.tex"]
         }));
-        const binary_pdf = await this.orError(this.FS_readFile("input.pdf"));
+        binary_pdf = await this.orError(this.FS_readFile("input.pdf"));
       } finally {
         //Reset system
         this.terminate();
@@ -40,7 +62,7 @@ class TeXLive {
 
     //Return data URL
     if (binary_pdf === false) { throw new Error("PDF failed to compile"); }
-    const outBlob = new Blob([outArray], { type: "application/pdf" });
+    const outBlob = new Blob([binary_pdf], { type: "application/pdf" });
     return URL.createObjectURL(outBlob);
     // return "data:application/pdf;charset=binary;base64," + btoa(binary_pdf);
   }
@@ -111,7 +133,7 @@ class TeXLive {
     //Make sure event handler uses this to refer to TeXLive instance
     this.worker.addEventListener("message", (ev) => { this.handleMsg(ev); });
     this.worker.addEventListener("error", (ev) => {
-      ev.preventDefault();
+      // ev.preventDefault();
       this.workerOnError("Worker: " + ev.message);
     });
     await this.orError(workerProm);
@@ -124,8 +146,17 @@ class TeXLive {
     //Add folders then files to emscripten
     const packages = await packagesProm;
     //Folders are created recursively
-    await this.orError(Promise.all(packages.folders.map((folder) => this.FS_createPath("/", folder, true, true))));
-    await this.orError(Promise.all(packages.files.map((file) => this.FS_createDataFile(file.path, file.name, TeXLive.getFile(file.fullurl), true, false))));
+    const folderRtns = await this.orError(Promise.all(packages.folders.map((folder) => this.FS_createPath("/", folder, true, true))));
+    if (!folderRtns.every((val) => val === true)) { throw new Error("Failed to create folders in Emscripten"); }
+    //TODO: Write permissions only for debugging - change to read only
+    // const tmp = packages.files.map((file) => )
+    // const tmp = await TeXLive.getFile(packages.files[0].fullurl);
+    // await this.orError(Promise.all(packages.files.map(async (file) => this.FS_createDataFile(file.path, file.name, tmp, true, false))));
+
+    const fileRtns = await this.orError(Promise.all(packages.files.map(async (file) => this.FS_createDataFile(file.path, file.name, await TeXLive.getFile(file.fullurl), true, false))));
+    if (!fileRtns.every((val) => val === true)) { throw new Error("Failed to create files in Emscripten"); }
+
+    // const filesVer = await this.orError(Promise.all(packages.files.map((file) => this.FS_readFile(file.path + "/" + file.name))));
   }
 
   async sendCmd(cmd) {
@@ -144,30 +175,30 @@ TeXLive.workerFolder = ""; //To be set relative to calling webpage
 
 TeXLive.getFile = (() => {
   //Download and store each required source file
-  const paths = [];
-  const contents = [];
+  const contents = {};
+
+  async function download(path) {
+    const fileFetch = await fetch(path);
+    if (!fileFetch.ok) { throw new Error("Could not download file " + path + ": " + fileFetch.status); }
+    //Store data according to file extension
+    switch (path.slice(path.lastIndexOf(".") + 1)) {
+    case "js":
+      //Web workers need a data URL
+      return URL.createObjectURL(await fileFetch.blob());
+      break;
+    case "lst":
+      return await fileFetch.text();
+      break;
+    default:
+      //Assume binary file - convert to binary string
+      return TeXLive.arrayBufferToString(await fileFetch.arrayBuffer());
+    }
+  }
 
   return async (path) => {
-    const pathInd = paths.indexOf(path);
-    if (pathInd === -1) {
-      //Not found: need to download
-      const fileFetch = await fetch(path);
-      if (!fileFetch.ok) { throw new Error("Could not download file " + path + ": " + fileFetch.status); }
-      let fileContent;
-      if (path.endsWith(".js")) {
-        //Web workers need a data URL
-        fileContent = URL.createObjectURL(await fileFetch.blob());
-      } else if (path.endsWith(".lst")) {
-        fileContent = await fileFetch.text();
-      } else {
-        fileContent = await fileFetch.arrayBuffer();
-      }
-      contents.push(fileContent);
-      paths.push(path);
-      return fileContent;
-    } else {
-      return contents[pathInd];
-    }
+    //Beware of race conditions - get downloads via promise, so this function executes in entirity in one, as JS is single threaded
+    if (contents[path] === undefined) { contents[path] = download(path); }
+    return await contents[path];
   };
 })();
 
@@ -187,7 +218,12 @@ TeXLive.getPackages = (() => {
       //Read and sort the list
       for (const url of urlList) {
         const lastSeparator = url.lastIndexOf("/");
-        const path = url.substring(0, lastSeparator);
+        let path;
+        if (lastSeparator === -1) {
+          path = "";
+        } else {
+          path = url.slice(0, lastSeparator);
+        }
         //Path and name do not include the / separating them
         if (url.endsWith(".")) {
           folders.push(path);
@@ -195,7 +231,7 @@ TeXLive.getPackages = (() => {
           files.push({
             fullurl: TeXLive.workerFolder + "texlive/" + url,
             path: path,
-            name: url.substring(lastSeparator + 1)
+            name: url.slice(lastSeparator + 1)
           });
         }
       }
