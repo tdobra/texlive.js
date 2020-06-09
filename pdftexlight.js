@@ -15,7 +15,6 @@ class TeXLive {
     this.createCmd("FS_readFile"); // filename; returns binary string
     //Private functions
     this.createCmd("FS_createPath"); // parent, name, canRead, canWrite
-    this.createCmd("set_TOTAL_MEMORY"); // size
     //Public properties
     this.ready = this.prestart();  //Returns a promise
   }
@@ -142,10 +141,7 @@ class TeXLive {
     this.worker.addEventListener("error", (ev) => { this.workerOnError("Worker: " + ev.message); });
     await this.orError(workerProm);
 
-    //Set memory
-    const memSize = 80 * 1024 * 1024;
-    const availableSize = await this.orError(this.set_TOTAL_MEMORY(memSize));
-    if (availableSize < memSize) { console.warn("Memory limited to " + availableSize + "B"); }
+    //Set memory? Don't bother as appears to have no effect
 
     //Add folders then files to emscripten
     const packages = await packagesProm;
