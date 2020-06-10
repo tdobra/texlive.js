@@ -41,8 +41,8 @@ class TeXLive {
 
   async compile(src, resourceStrings = [], resourceNames = []) {
     //src is URL of TeX document to run
-    //resourceBuffers is an array of binary strings of additional input files with corresponding names in resourceNames
-    let binary_pdf;
+    //resourceStrings is an array of binary strings of additional input files with corresponding names in resourceNames
+    let pdfURL;
     try {
       try {
         await this.orError(this.ready);
@@ -58,19 +58,21 @@ class TeXLive {
           "command": "run",
           "arguments": ["-interaction=nonstopmode", "-output-format", "pdf", "input.tex"]
         }));
-        binary_pdf = await this.orError(this.FS_readFile("input.pdf"));
+        await this.compileProm;
+        const binary_pdf = await this.orError(this.FS_readFile("input.pdf"));
+        //Return data URL
+        const outBlob = new Blob([TeXLive.binaryStringToU8Array(binary_pdf)], { type: "application/pdf" });
+        pdfURL = URL.createObjectURL(outBlob);
       } finally {
         //Reset system
         this.terminate();
         //Ready is reset to new promise before compile promise resolves
         this.ready = this.prestart();
       }
-    } catch (err) { throw err; }
-
-    //Return data URL
-    if (binary_pdf === false) { throw new Error("PDF failed to compile"); }
-    const outBlob = new Blob([TeXLive.binaryStringToU8Array(binary_pdf)], { type: "application/pdf" });
-    return URL.createObjectURL(outBlob);
+    } catch (err) {
+      throw err;
+    }
+    return pdfURL;
   }
 
   terminate() {
@@ -98,7 +100,18 @@ class TeXLive {
       break;
     case "stdout":
     case "stderr":
-      this.onlog(data.contents);
+      try {
+        const msg = data.contents;
+        this.onlog(msg);
+        //Won't reach here if onlog throws an error
+        if (msg.startsWith("Output written")) {
+          this.compilePromResolve();
+        } else if (msg.includes("no output PDF file produced")) {
+          throw new Error("PDF failed to compile");
+        }
+      } catch (err) {
+        this.compilePromReject(err);
+      }
       break;
     default:
       const msg_id = data.msg_id;
@@ -130,6 +143,12 @@ class TeXLive {
     //Initiate file downloads
     const workerSrc = TeXLive.getFile(TeXLive.workerFolder + "pdftex-worker.js");
     const packagesProm = TeXLive.getPackages();
+
+    //Read TeXLive log and resolve/reject promise to compile
+    this.compileProm = new Promise((resolve, reject) => {
+      this.compilePromResolve = resolve;
+      this.compilePromReject = reject;
+    });
 
     //Start worker
     const workerProm = new Promise((resolve) => { this.workerReady = resolve; });
